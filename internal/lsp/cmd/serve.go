@@ -87,11 +87,11 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 
 	if s.Address != "" {
 		network, addr := parseAddr(s.Address)
-		return jsonrpc2.ListenAndServe(ctx, network, addr, ss, s.IdleTimeout)
+		return jsonrpc2.ListenAndServe(ctx, network, listenAddr(network, addr), ss, s.IdleTimeout)
 	}
 	if s.Port != 0 {
 		addr := fmt.Sprintf(":%v", s.Port)
-		return jsonrpc2.ListenAndServe(ctx, "tcp", addr, ss, s.IdleTimeout)
+		return jsonrpc2.ListenAndServe(ctx, "tcp", listenAddr("tcp", addr), ss, s.IdleTimeout)
 	}
 	stream := jsonrpc2.NewHeaderStream(fakenet.NewConn("stdio", os.Stdin, os.Stdout))
 	if s.Trace && di != nil {
@@ -99,6 +99,17 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 	}
 	conn := jsonrpc2.NewConn(stream)
 	return ss.ServeStream(ctx, conn)
+}
+
+// listenAddr rewrites a TCP address with no host, such as ":8080", to bind
+// localhost rather than all network interfaces, so that the server is not
+// reachable from other machines (CVE-2026-42503). Pass an explicit host such
+// as 0.0.0.0 to listen on all interfaces.
+func listenAddr(network, addr string) string {
+	if strings.HasPrefix(network, "tcp") && strings.HasPrefix(addr, ":") {
+		return "localhost" + addr
+	}
+	return addr
 }
 
 // parseAddr parses the -listen flag in to a network, and address.
